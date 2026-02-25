@@ -11,37 +11,17 @@ const adStyles = [
     { id: "luxury", label: "Luxury", icon: "✨" },
     { id: "bold", label: "Bold", icon: "🔥" },
     { id: "minimal", label: "Minimal", icon: "◯" },
-    { id: "viral", label: "Viral", icon: "⚡" },
+    { id: "cinematic", label: "Cinematic", icon: "🎬" },
+    { id: "playful", label: "Playful", icon: "🎨" },
+    { id: "corporate", label: "Corporate", icon: "💼" },
 ];
 
-const aspectRatios = ["9:16", "16:9"];
-const durations = [
-    { value: "4", label: "4s" },
-    { value: "6", label: "6s" },
-    { value: "8", label: "8s" },
-];
+const aspectRatios = ["16:9", "9:16"];
 
-interface AdCopy {
-    headline: string;
-    subheadline: string;
-    cta: string;
-    bodyText: string;
-    colorScheme: string;
-    mood: string;
-    targetAudience: string;
-    videoDescription?: string;
-}
-
-interface GeneratedAd {
-    adCopy: AdCopy;
-    generatedVideo: {
-        data: string;
-        mimeType: string;
-    } | null;
-    generatedImage: {
-        data: string;
-        mimeType: string;
-    } | null;
+interface GenerationResult {
+    success: boolean;
+    videoUrl: string;
+    generationId: string;
 }
 
 export default function GeneratorPage() {
@@ -51,16 +31,20 @@ export default function GeneratorPage() {
     const [brandName, setBrandName] = useState("");
     const [productDescription, setProductDescription] = useState("");
     const [selectedStyle, setSelectedStyle] = useState("luxury");
-    const [selectedRatio, setSelectedRatio] = useState("9:16");
-    const [selectedDuration, setSelectedDuration] = useState("6");
+    const [selectedRatio, setSelectedRatio] = useState("16:9");
+    const [selectedDuration, setSelectedDuration] = useState(6);
     const [productPhoto, setProductPhoto] = useState<File | null>(null);
     const [productPreview, setProductPreview] = useState<string | null>(null);
     const [modelPhoto, setModelPhoto] = useState<File | null>(null);
     const [modelPreview, setModelPreview] = useState<string | null>(null);
+    const [uploadError, setUploadError] = useState<string | null>(null);
+
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+    const isFreeUser = !user?.role || user.role === "free";
 
     // Generation state
     const [isGenerating, setIsGenerating] = useState(false);
-    const [generatedAd, setGeneratedAd] = useState<GeneratedAd | null>(null);
+    const [generationResult, setGenerationResult] = useState<GenerationResult | null>(null);
     const [genError, setGenError] = useState<string | null>(null);
     const [elapsedTime, setElapsedTime] = useState(0);
 
@@ -92,6 +76,12 @@ export default function GeneratorPage() {
     const handleProductUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+        if (isFreeUser && file.size > MAX_FILE_SIZE) {
+            setUploadError("Image exceeds 10 MB. Upgrade to Pro for larger uploads.");
+            e.target.value = "";
+            return;
+        }
+        setUploadError(null);
         setProductPhoto(file);
         setProductPreview(URL.createObjectURL(file));
     };
@@ -99,31 +89,37 @@ export default function GeneratorPage() {
     const handleModelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+        if (isFreeUser && file.size > MAX_FILE_SIZE) {
+            setUploadError("Image exceeds 10 MB. Upgrade to Pro for larger uploads.");
+            e.target.value = "";
+            return;
+        }
+        setUploadError(null);
         setModelPhoto(file);
         setModelPreview(URL.createObjectURL(file));
     };
 
     const handleGenerate = async () => {
-        if (!brandName.trim() || !productPhoto) return;
+        if (!productDescription.trim() || !productPhoto) return;
         if (!hasCredits) return;
 
         setIsGenerating(true);
         setGenError(null);
-        setGeneratedAd(null);
+        setGenerationResult(null);
 
         try {
             const formData = new FormData();
             formData.append("brandName", brandName.trim());
             formData.append("productDescription", productDescription.trim());
             formData.append("productPhoto", productPhoto);
-            formData.append("adStyle", selectedStyle);
+            formData.append("style", selectedStyle);
             formData.append("aspectRatio", selectedRatio);
-            formData.append("duration", selectedDuration);
+            formData.append("duration", String(selectedDuration));
             if (modelPhoto) {
                 formData.append("modelPhoto", modelPhoto);
             }
 
-            const response = await fetch("/api/generate", {
+            const response = await fetch("/api/v1/generate-ad", {
                 method: "POST",
                 body: formData,
             });
@@ -134,10 +130,10 @@ export default function GeneratorPage() {
                 throw new Error(data.error || "Generation failed");
             }
 
-            setGeneratedAd({
-                adCopy: data.adCopy,
-                generatedVideo: data.generatedVideo,
-                generatedImage: data.generatedImage,
+            setGenerationResult({
+                success: data.success,
+                videoUrl: data.videoUrl,
+                generationId: data.generationId,
             });
 
             // Deduct credit after successful generation
@@ -155,7 +151,7 @@ export default function GeneratorPage() {
         }
     };
 
-    const canGenerate = brandName.trim() && productDescription.trim() && productPhoto && hasCredits && !isGenerating;
+    const canGenerate = productDescription.trim() && productPhoto && hasCredits && !isGenerating;
 
     const formatTime = (seconds: number) => {
         const m = Math.floor(seconds / 60);
@@ -391,22 +387,25 @@ export default function GeneratorPage() {
                                         <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3">
                                             Duration
                                         </h3>
-                                        <div className="flex flex-wrap gap-2">
-                                            {durations.map((d) => (
-                                                <button
-                                                    key={d.value}
-                                                    onClick={() => setSelectedDuration(d.value)}
-                                                    className={`
-                                                        px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer
-                                                        ${selectedDuration === d.value
-                                                            ? "bg-accent-purple text-white"
-                                                            : "bg-surface-light text-text-muted hover:text-text-secondary"
-                                                        }
-                                                    `}
-                                                >
-                                                    {d.label}
-                                                </button>
-                                            ))}
+                                        <div className="space-y-3">
+                                            <input
+                                                type="range"
+                                                min={4}
+                                                max={12}
+                                                step={1}
+                                                value={selectedDuration}
+                                                onChange={(e) => setSelectedDuration(Number(e.target.value))}
+                                                className="duration-slider w-full"
+                                                style={{
+                                                    background: `linear-gradient(90deg, var(--accent-purple) 0%, var(--accent-indigo) ${((selectedDuration - 4) / 8) * 100}%, var(--surface-light) ${((selectedDuration - 4) / 8) * 100}%)`,
+                                                }}
+                                                aria-label="Video duration"
+                                            />
+                                            <div className="flex justify-between text-xs text-text-muted">
+                                                <span>4s</span>
+                                                <span className="text-accent-purple font-semibold text-sm">{selectedDuration}s</span>
+                                                <span>12s</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -450,6 +449,11 @@ export default function GeneratorPage() {
                                         Upgrade to Pro for 400 credits
                                     </p>
                                 )}
+                                {uploadError && (
+                                    <p className="text-center text-xs text-red-400 mt-2">
+                                        {uploadError}
+                                    </p>
+                                )}
                                 {isGenerating && (
                                     <p className="text-center text-xs text-text-muted mt-2 animate-pulse">
                                         Video generation takes 1-3 minutes. Please wait...
@@ -463,7 +467,7 @@ export default function GeneratorPage() {
                             initial={{ opacity: 0, x: 30 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.2 }}
-                            className="lg:col-span-7"
+                            className="lg:col-span-7 lg:sticky lg:top-8 lg:max-h-[calc(100vh-4rem)] lg:overflow-y-auto"
                         >
                             <div className="glass rounded-2xl p-6 min-h-[600px] flex flex-col">
                                 <div className="flex items-center justify-between mb-6">
@@ -471,9 +475,9 @@ export default function GeneratorPage() {
                                         Preview
                                     </h3>
                                     <div className="flex items-center gap-2">
-                                        <span className={`w-2 h-2 rounded-full ${isGenerating ? "bg-accent-gold animate-pulse" : generatedAd ? "bg-green-400" : "bg-text-muted"}`} />
+                                        <span className={`w-2 h-2 rounded-full ${isGenerating ? "bg-accent-gold animate-pulse" : generationResult ? "bg-green-400" : "bg-text-muted"}`} />
                                         <span className="text-xs text-text-muted">
-                                            {isGenerating ? `Generating... ${formatTime(elapsedTime)}` : generatedAd ? (generatedAd.generatedVideo ? "Video Ready" : "Ad Copy Ready") : "Waiting"}
+                                            {isGenerating ? `Generating... ${formatTime(elapsedTime)}` : generationResult ? "Video Ready" : "Waiting"}
                                         </span>
                                     </div>
                                 </div>
@@ -557,7 +561,7 @@ export default function GeneratorPage() {
                                                 </button>
                                             </motion.div>
 
-                                        ) : generatedAd ? (
+                                        ) : generationResult ? (
                                             <motion.div
                                                 key="generated"
                                                 initial={{ opacity: 0, scale: 0.9 }}
@@ -565,92 +569,18 @@ export default function GeneratorPage() {
                                                 exit={{ opacity: 0 }}
                                                 className="w-full h-full flex flex-col"
                                             >
-                                                {/* Video Player, AI Image, or CSS Fallback */}
-                                                {generatedAd.generatedVideo ? (
-                                                    <div className="flex-1 flex items-center justify-center p-4 bg-black/40">
-                                                        <video
-                                                            ref={videoRef}
-                                                            src={`data:${generatedAd.generatedVideo.mimeType};base64,${generatedAd.generatedVideo.data}`}
-                                                            controls
-                                                            autoPlay
-                                                            loop
-                                                            playsInline
-                                                            className="max-w-full max-h-[500px] rounded-xl shadow-2xl"
-                                                        />
-                                                    </div>
-                                                ) : generatedAd.generatedImage ? (
-                                                    <div className="flex-1 flex items-center justify-center p-4 bg-black/20">
-                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                        <img
-                                                            src={`data:${generatedAd.generatedImage.mimeType};base64,${generatedAd.generatedImage.data}`}
-                                                            alt="AI Generated Ad"
-                                                            className="max-w-full max-h-[500px] rounded-xl shadow-2xl object-contain"
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    /* Visual Ad Card with Product Photo — CSS fallback */
-                                                    <div className="flex-1 flex items-center justify-center p-4">
-                                                        <div
-                                                            id="ad-canvas"
-                                                            className="w-full max-w-sm rounded-2xl overflow-hidden relative shadow-2xl"
-                                                            style={{
-                                                                aspectRatio: selectedRatio === "9:16" ? "9/16" : "16/9",
-                                                                maxHeight: "500px",
-                                                            }}
-                                                        >
-                                                            {/* Gradient background */}
-                                                            <div className="absolute inset-0 bg-gradient-to-br from-[#1a0533] via-[#0f0f14] to-[#0a1628]" />
-                                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
-
-                                                            {/* Decorative glow */}
-                                                            <div className="absolute top-0 right-0 w-40 h-40 bg-accent-purple/20 rounded-full blur-[80px]" />
-                                                            <div className="absolute bottom-20 left-0 w-32 h-32 bg-accent-indigo/15 rounded-full blur-[60px]" />
-
-                                                            {/* Product image */}
-                                                            {productPreview && (
-                                                                <div className="absolute inset-0 flex items-center justify-center z-10">
-                                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                                    <img
-                                                                        src={productPreview}
-                                                                        alt="Product"
-                                                                        className="w-3/5 max-h-[45%] object-contain"
-                                                                        style={{ filter: "drop-shadow(0 10px 30px rgba(0,0,0,0.5)) drop-shadow(0 20px 40px rgba(124,58,237,0.3))" }}
-                                                                    />
-                                                                </div>
-                                                            )}
-
-                                                            {/* Brand badge at top */}
-                                                            <div className="absolute top-6 left-0 right-0 z-20 text-center">
-                                                                <span className="inline-block px-4 py-1.5 bg-white/10 backdrop-blur-sm rounded-full text-[10px] uppercase tracking-[0.2em] text-white/80 font-semibold border border-white/10">
-                                                                    {brandName}
-                                                                </span>
-                                                            </div>
-
-                                                            {/* Text overlay at bottom */}
-                                                            <div className="absolute bottom-0 left-0 right-0 z-20 p-6 bg-gradient-to-t from-black/90 via-black/60 to-transparent pt-16">
-                                                                <h2 className="text-xl font-bold text-white leading-tight mb-2 drop-shadow-lg">
-                                                                    {generatedAd.adCopy.headline}
-                                                                </h2>
-                                                                <p className="text-white/60 text-xs mb-4 leading-relaxed">
-                                                                    {generatedAd.adCopy.subheadline}
-                                                                </p>
-                                                                <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-[#7C3AED] to-[#6366F1] text-white text-xs font-bold uppercase tracking-wider shadow-lg shadow-purple-500/25">
-                                                                    {generatedAd.adCopy.cta}
-                                                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                                                                    </svg>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* "Video not available" badge */}
-                                                            <div className="absolute top-6 right-4 z-20">
-                                                                <span className="text-[9px] px-2 py-1 rounded-md bg-accent-gold/20 text-accent-gold border border-accent-gold/20">
-                                                                    Preview Only
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
+                                                {/* Video Player — CDN URL */}
+                                                <div className="flex-1 flex items-center justify-center p-4 bg-black/40">
+                                                    <video
+                                                        ref={videoRef}
+                                                        src={generationResult.videoUrl}
+                                                        controls
+                                                        autoPlay
+                                                        loop
+                                                        playsInline
+                                                        className="max-w-full max-h-[500px] rounded-xl shadow-2xl"
+                                                    />
+                                                </div>
 
                                                 {/* Ad Details & Actions */}
                                                 <div className="p-4 border-t border-border">
@@ -663,47 +593,29 @@ export default function GeneratorPage() {
                                                                 {selectedRatio}
                                                             </span>
                                                             <span className="text-xs px-2 py-1 rounded-md bg-surface-light text-text-muted border border-border">
-                                                                {generatedAd.generatedVideo ? "🎬 Video" : generatedAd.generatedImage ? "🖼️ AI Image" : "✨ Preview"}
+                                                                {selectedDuration}s
                                                             </span>
-                                                            <span className="text-xs px-2 py-1 rounded-md bg-surface-light text-text-muted border border-border">
-                                                                🎯 {generatedAd.adCopy.targetAudience}
+                                                            <span className="text-xs px-2 py-1 rounded-md bg-green-500/10 text-green-400 border border-green-500/20">
+                                                                🎬 Video Ready
                                                             </span>
                                                         </div>
                                                         <div className="flex gap-2">
-                                                            {generatedAd.generatedVideo && (
-                                                                <Button
-                                                                    variant="primary"
-                                                                    size="sm"
-                                                                    onClick={() => {
-                                                                        const link = document.createElement("a");
-                                                                        link.href = `data:${generatedAd.generatedVideo!.mimeType};base64,${generatedAd.generatedVideo!.data}`;
-                                                                        link.download = `${brandName.replace(/\s+/g, "-")}-ad.mp4`;
-                                                                        link.click();
-                                                                    }}
-                                                                >
-                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                                                                    </svg>
-                                                                    Download MP4
-                                                                </Button>
-                                                            )}
-                                                            {generatedAd.generatedImage && (
-                                                                <Button
-                                                                    variant="primary"
-                                                                    size="sm"
-                                                                    onClick={() => {
-                                                                        const link = document.createElement("a");
-                                                                        link.href = `data:${generatedAd.generatedImage!.mimeType};base64,${generatedAd.generatedImage!.data}`;
-                                                                        link.download = `${brandName.replace(/\s+/g, "-")}-ad.png`;
-                                                                        link.click();
-                                                                    }}
-                                                                >
-                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                                                                    </svg>
-                                                                    Download Image
-                                                                </Button>
-                                                            )}
+                                                            <Button
+                                                                variant="primary"
+                                                                size="sm"
+                                                                onClick={() => {
+                                                                    const link = document.createElement("a");
+                                                                    link.href = generationResult.videoUrl;
+                                                                    link.download = `${(brandName || "ad").replace(/\s+/g, "-")}-${generationResult.generationId.slice(0, 8)}.mp4`;
+                                                                    link.target = "_blank";
+                                                                    link.click();
+                                                                }}
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                                                </svg>
+                                                                Download MP4
+                                                            </Button>
                                                             <Button variant="outline" size="sm" onClick={handleGenerate} disabled={!hasCredits}>
                                                                 Regenerate
                                                             </Button>
