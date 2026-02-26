@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/hooks/useAuth";
 import { userService } from "@/services/user";
+import { communityService } from "@/services/community";
 
 const adStyles = [
     { id: "luxury", label: "Luxury", icon: "✨" },
@@ -50,6 +51,7 @@ export default function GeneratorPage() {
     // Form state
     const [brandName, setBrandName] = useState("");
     const [productDescription, setProductDescription] = useState("");
+    const [generationType, setGenerationType] = useState<"image" | "video">("image");
     const [selectedStyle, setSelectedStyle] = useState("luxury");
     const [selectedRatio, setSelectedRatio] = useState("9:16");
     const [selectedDuration, setSelectedDuration] = useState("6");
@@ -63,6 +65,14 @@ export default function GeneratorPage() {
     const [generatedAd, setGeneratedAd] = useState<GeneratedAd | null>(null);
     const [genError, setGenError] = useState<string | null>(null);
     const [elapsedTime, setElapsedTime] = useState(0);
+
+    // Share to community state
+    const [showShareModal, setShowShareModal] = useState(false);
+    const [shareTitle, setShareTitle] = useState("");
+    const [shareDesc, setShareDesc] = useState("");
+    const [shareLink, setShareLink] = useState("");
+    const [sharing, setSharing] = useState(false);
+    const [shared, setShared] = useState(false);
 
     const productInputRef = useRef<HTMLInputElement>(null);
     const modelInputRef = useRef<HTMLInputElement>(null);
@@ -119,6 +129,7 @@ export default function GeneratorPage() {
             formData.append("adStyle", selectedStyle);
             formData.append("aspectRatio", selectedRatio);
             formData.append("duration", selectedDuration);
+            formData.append("generationType", generationType);
             if (modelPhoto) {
                 formData.append("modelPhoto", modelPhoto);
             }
@@ -163,6 +174,37 @@ export default function GeneratorPage() {
         return m > 0 ? `${m}:${s.toString().padStart(2, "0")}` : `${s}s`;
     };
 
+    const openShareModal = () => {
+        setShareTitle(`${brandName} - ${selectedStyle} Ad`);
+        setShareDesc(productDescription);
+        setShareLink("");
+        setShared(false);
+        setShowShareModal(true);
+    };
+
+    const handleShare = async () => {
+        if (!generatedAd || !shareTitle.trim()) return;
+        setSharing(true);
+        try {
+            const media = generatedAd.generatedVideo || generatedAd.generatedImage;
+            if (!media) return;
+            await communityService.shareFromGenerator({
+                title: shareTitle.trim(),
+                description: shareDesc.trim(),
+                link: shareLink.trim(),
+                imageBase64: media.data,
+                mimeType: media.mimeType,
+                mediaType: generatedAd.generatedVideo ? "video" : "image",
+            });
+            setShared(true);
+            setTimeout(() => setShowShareModal(false), 1500);
+        } catch (err) {
+            console.error("Share failed:", err);
+        } finally {
+            setSharing(false);
+        }
+    };
+
     return (
         <ProtectedRoute>
             <div className="min-h-screen bg-background pt-24 pb-12">
@@ -182,10 +224,10 @@ export default function GeneratorPage() {
                         <div className="flex items-center justify-between flex-wrap gap-4">
                             <div>
                                 <h1 className="text-3xl md:text-4xl font-display font-bold text-gradient tracking-tight">
-                                    AI Video Ad Generator
+                                    AI Ad Generator
                                 </h1>
                                 <p className="text-text-secondary mt-2">
-                                    Upload your product & model — AI creates a video ad with Veo 3.1
+                                    Upload your product — AI creates a {generationType === "video" ? "video" : "image"} ad with Gemini
                                 </p>
                             </div>
                             {/* Credits indicator */}
@@ -362,6 +404,43 @@ export default function GeneratorPage() {
                                 </div>
                             </div>
 
+                            {/* Generation Type Toggle */}
+                            <div className="glass rounded-2xl p-6">
+                                <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">
+                                    Output Type
+                                </h3>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => setGenerationType("image")}
+                                        className={`
+                                            flex flex-col items-center gap-2 px-4 py-4 rounded-xl border transition-all duration-300 text-sm font-medium cursor-pointer
+                                            ${generationType === "image"
+                                                ? "border-accent-purple/60 bg-accent-purple/10 text-text-primary shadow-[0_0_20px_rgba(124,58,237,0.15)]"
+                                                : "border-border bg-surface-light/50 text-text-secondary hover:border-accent-purple/30"
+                                            }
+                                        `}
+                                    >
+                                        <span className="text-2xl">🖼️</span>
+                                        <span>Image Ad</span>
+                                        <span className="text-xs text-text-muted">~15 seconds</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setGenerationType("video")}
+                                        className={`
+                                            flex flex-col items-center gap-2 px-4 py-4 rounded-xl border transition-all duration-300 text-sm font-medium cursor-pointer
+                                            ${generationType === "video"
+                                                ? "border-accent-purple/60 bg-accent-purple/10 text-text-primary shadow-[0_0_20px_rgba(124,58,237,0.15)]"
+                                                : "border-border bg-surface-light/50 text-text-secondary hover:border-accent-purple/30"
+                                            }
+                                        `}
+                                    >
+                                        <span className="text-2xl">🎬</span>
+                                        <span>Video Ad</span>
+                                        <span className="text-xs text-text-muted">~2-3 minutes</span>
+                                    </button>
+                                </div>
+                            </div>
+
                             {/* Format & Duration */}
                             <div className="glass rounded-2xl p-6">
                                 <div className="grid grid-cols-2 gap-6">
@@ -427,7 +506,7 @@ export default function GeneratorPage() {
                                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                                             </svg>
-                                            Generating Video... {formatTime(elapsedTime)}
+                                            Generating {generationType === "video" ? "Video" : "Image"}... {formatTime(elapsedTime)}
                                         </>
                                     ) : !hasCredits ? (
                                         <>
@@ -441,7 +520,7 @@ export default function GeneratorPage() {
                                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
                                             </svg>
-                                            Generate Video Ad — 1 Credit
+                                            Generate {generationType === "video" ? "Video" : "Image"} Ad — 1 Credit
                                         </>
                                     )}
                                 </Button>
@@ -452,7 +531,7 @@ export default function GeneratorPage() {
                                 )}
                                 {isGenerating && (
                                     <p className="text-center text-xs text-text-muted mt-2 animate-pulse">
-                                        Video generation takes 1-3 minutes. Please wait...
+                                        {generationType === "video" ? "Video generation takes 1-3 minutes." : "Image generation takes 10-30 seconds."} Please wait...
                                     </p>
                                 )}
                             </div>
@@ -704,6 +783,14 @@ export default function GeneratorPage() {
                                                                     Download Image
                                                                 </Button>
                                                             )}
+                                                            {(generatedAd.generatedVideo || generatedAd.generatedImage) && (
+                                                                <Button variant="outline" size="sm" onClick={openShareModal}>
+                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+                                                                    </svg>
+                                                                    Share to Community
+                                                                </Button>
+                                                            )}
                                                             <Button variant="outline" size="sm" onClick={handleGenerate} disabled={!hasCredits}>
                                                                 Regenerate
                                                             </Button>
@@ -736,6 +823,81 @@ export default function GeneratorPage() {
                     </div>
                 </div>
             </div>
+            {/* Share to Community Modal */}
+            <AnimatePresence>
+                {showShareModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        onClick={() => !sharing && setShowShareModal(false)}
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="glass rounded-2xl p-6 max-w-md w-full border border-border"
+                        >
+                            {shared ? (
+                                <div className="text-center py-8">
+                                    <div className="w-16 h-16 mx-auto rounded-full bg-green-500/20 flex items-center justify-center mb-4">
+                                        <svg className="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                        </svg>
+                                    </div>
+                                    <p className="text-lg font-semibold text-text-primary">Shared to Community! 🎉</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <h2 className="text-xl font-display font-bold text-text-primary mb-6">
+                                        Share to Community
+                                    </h2>
+                                    <div className="mb-4">
+                                        <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2 block">Title *</label>
+                                        <input
+                                            type="text"
+                                            value={shareTitle}
+                                            onChange={(e) => setShareTitle(e.target.value)}
+                                            maxLength={100}
+                                            className="w-full bg-surface-light/80 border border-border rounded-xl px-4 py-3 text-text-primary placeholder-text-muted text-sm outline-none focus:border-accent-purple/50 transition-all"
+                                        />
+                                    </div>
+                                    <div className="mb-4">
+                                        <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2 block">Description</label>
+                                        <textarea
+                                            value={shareDesc}
+                                            onChange={(e) => setShareDesc(e.target.value)}
+                                            rows={2}
+                                            maxLength={500}
+                                            className="w-full bg-surface-light/80 border border-border rounded-xl px-4 py-3 text-text-primary placeholder-text-muted text-sm outline-none focus:border-accent-purple/50 transition-all resize-none"
+                                        />
+                                    </div>
+                                    <div className="mb-6">
+                                        <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2 block">Website / Product Link</label>
+                                        <input
+                                            type="url"
+                                            value={shareLink}
+                                            onChange={(e) => setShareLink(e.target.value)}
+                                            placeholder="https://your-brand.com"
+                                            className="w-full bg-surface-light/80 border border-border rounded-xl px-4 py-3 text-text-primary placeholder-text-muted text-sm outline-none focus:border-accent-purple/50 transition-all"
+                                        />
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <Button variant="outline" onClick={() => setShowShareModal(false)} disabled={sharing} fullWidth>
+                                            Cancel
+                                        </Button>
+                                        <Button variant="primary" onClick={handleShare} disabled={!shareTitle.trim() || sharing} fullWidth>
+                                            {sharing ? "Sharing..." : "Share"}
+                                        </Button>
+                                    </div>
+                                </>
+                            )}
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </ProtectedRoute>
     );
 }
