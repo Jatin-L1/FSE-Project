@@ -21,9 +21,20 @@ const app = express();
 connectDB();
 
 // ─── Middleware ───────────────────────────────────────────────
+const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:3000")
+    .split(",")
+    .map((o) => o.trim());
+
 app.use(
     cors({
-        origin: process.env.CLIENT_URL || "http://localhost:3000",
+        origin: (origin, callback) => {
+            // Allow requests with no origin (e.g., mobile apps, curl)
+            if (!origin) return callback(null, true);
+            if (allowedOrigins.some((allowed) => origin === allowed || origin.endsWith(".vercel.app"))) {
+                return callback(null, true);
+            }
+            callback(new Error("Not allowed by CORS"));
+        },
         credentials: true,
     })
 );
