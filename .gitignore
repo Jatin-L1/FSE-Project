@@ -16,6 +16,7 @@ node_modules/
 # Misc
 .DS_Store
 *.pem
+Thumbs.db
 
 # Temp files (Claude Code working directory markers)
 tmpclaude-*
@@ -39,3 +40,16 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Desktop.ini
+ehthumbs.db
+
+# Package lock (server uses its own)
+server/node_modules/
