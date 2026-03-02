@@ -12,6 +12,7 @@ import { paymentService } from "@/services/payment";
 const navLinks = [
     { label: "Features", href: "#features" },
     { label: "Generator", href: "/generator" },
+    { label: "Community", href: "/community" },
     { label: "Pricing", href: "#pricing" },
 ];
 

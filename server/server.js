@@ -13,6 +13,7 @@ const passport = require("./config/passport");
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/user");
 const paymentRoutes = require("./routes/payment");
+const communityRoutes = require("./routes/community");
 
 const app = express();
 
@@ -20,9 +21,20 @@ const app = express();
 connectDB();
 
 // ─── Middleware ───────────────────────────────────────────────
+const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:3000")
+    .split(",")
+    .map((o) => o.trim());
+
 app.use(
     cors({
-        origin: process.env.CLIENT_URL || "http://localhost:3000",
+        origin: (origin, callback) => {
+            // Allow requests with no origin (e.g., mobile apps, curl)
+            if (!origin) return callback(null, true);
+            if (allowedOrigins.some((allowed) => origin === allowed || origin.endsWith(".vercel.app"))) {
+                return callback(null, true);
+            }
+            callback(new Error("Not allowed by CORS"));
+        },
         credentials: true,
     })
 );
@@ -51,6 +63,7 @@ app.use(passport.session());
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/payment", paymentRoutes);
+app.use("/api/community", communityRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {

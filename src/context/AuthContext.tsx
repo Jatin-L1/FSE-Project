@@ -8,6 +8,7 @@ import { userService, type UserProfile } from "@/services/user";
 export interface AuthState {
     isAuthenticated: boolean;
     user: {
+        id: string;
         name: string;
         email: string;
         role: "free" | "pro";

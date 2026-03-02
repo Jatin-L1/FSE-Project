@@ -1,6 +1,7 @@
 import api from "./api";
 
 export interface UserProfile {
+    id: string;
     name: string;
     email: string;
     role: "free" | "pro";

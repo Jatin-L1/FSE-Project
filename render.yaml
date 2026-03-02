@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: ai-ads-backend
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: CLIENT_URL
+        sync: false          # Set to your Vercel deployment URL
+      - key: SERVER_URL
+        sync: false          # Set to this Render service URL after first deploy
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: PHONEPE_MERCHANT_ID
+        sync: false
+      - key: PHONEPE_SALT_KEY
+        sync: false
+      - key: PHONEPE_SALT_INDEX
+        value: "1"
+      - key: PHONEPE_API_URL
+        value: "https://api.phonepe.com/apis/hermes"  # switch to sandbox for testing: https://api-preprod.phonepe.com/apis/pg-sandbox
