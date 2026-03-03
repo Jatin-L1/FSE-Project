@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
       formData.set("duration", String(json.duration || 6));
       formData.set("style", json.style || "luxury");
       formData.set("aspectRatio", json.aspectRatio || "16:9");
+      formData.set("generationType", json.generationType || "video");
     }
 
     // Extract text fields and coerce types
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
       duration: parseInt((formData.get("duration") as string) || "6", 10),
       style: (formData.get("style") as string) || "luxury",
       aspectRatio: (formData.get("aspectRatio") as string) || "16:9",
+      generationType: (formData.get("generationType") as string) || "video",
     };
 
     // Validate with Zod
@@ -51,7 +53,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { prompt, brandName, duration, style, aspectRatio } = parsed.data;
+    const { prompt, brandName, duration, style, aspectRatio, generationType } = parsed.data;
+    const overridePrompt = ((formData.get("overridePrompt") as string) ?? "").trim() || undefined;
 
     const productPhotoFile = formData.get("productPhoto") as File | null;
     const modelPhotoFile = formData.get("modelPhoto") as File | null;
@@ -110,28 +113,58 @@ export async function POST(request: NextRequest) {
     const repo = getGenerationRepository();
     await repo.create(generation);
 
-    const result = await aiService.generateAdVideo(
-      prompt,
-      duration,
-      style,
-      brandName,
-      aspectRatio,
-      productImageBuffer,
-      modelImageBuffer
-    );
+    let mediaUrl: string;
+    let thumbnailUrl: string;
+    let cloudinaryPublicId: string;
+    let enhancedPrompt: string;
+
+    if (generationType === "image") {
+      const result = await aiService.generateAdImageAd(
+        prompt,
+        style,
+        brandName,
+        aspectRatio,
+        productImageBuffer,
+        modelImageBuffer,
+        overridePrompt
+      );
+      mediaUrl = result.imageUrl;
+      thumbnailUrl = result.thumbnailUrl;
+      cloudinaryPublicId = result.cloudinaryPublicId;
+      enhancedPrompt = result.enhancedPrompt;
+    } else {
+      const result = await aiService.generateAdVideo(
+        prompt,
+        duration,
+        style,
+        brandName,
+        aspectRatio,
+        productImageBuffer,
+        modelImageBuffer,
+        overridePrompt
+      );
+      mediaUrl = result.videoUrl;
+      thumbnailUrl = result.thumbnailUrl;
+      cloudinaryPublicId = result.cloudinaryPublicId;
+      enhancedPrompt = result.enhancedPrompt;
+    }
 
     await repo.updateStatus(generationId, {
       status: "succeeded",
       progress: 100,
-      videoUrl: result.videoUrl,
-      thumbnailUrl: result.thumbnailUrl,
-      cloudinaryPublicId: result.cloudinaryPublicId,
+      videoUrl: mediaUrl,
+      thumbnailUrl,
+      cloudinaryPublicId,
     });
 
     return NextResponse.json({
       success: true,
-      videoUrl: result.videoUrl,
+      videoUrl: mediaUrl,
+      thumbnailUrl,
+      cloudinaryPublicId,
       generationId,
+      mediaType: generationType,
+      enhancedPrompt,
     });
   } catch (error) {
     console.error("POST /api/v1/generate-ad error:", error);
