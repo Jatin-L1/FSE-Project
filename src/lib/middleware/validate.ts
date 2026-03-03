@@ -25,9 +25,14 @@ export const generateAdSchema = z.object({
   ),
 
   aspectRatio: z.enum(
-    ["9:16", "16:9"],
-    { error: "Invalid format. Must be 9:16 or 16:9" }
+    ["9:16", "16:9", "1:1", "4:5"],
+    { error: "Invalid format. Must be one of: 9:16, 16:9, 1:1, 4:5" }
   ).default("16:9"),
+
+  generationType: z.enum(
+    ["image", "video"],
+    { error: "Invalid generation type. Must be 'image' or 'video'" }
+  ).default("video"),
 });
 
 export type GenerateAdInput = z.infer<typeof generateAdSchema>;
