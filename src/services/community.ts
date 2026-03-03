@@ -1,11 +1,4 @@
-import axios from "axios";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-
-const getAuthHeaders = () => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-};
+import api from "./api";
 
 export interface CommunityPost {
     _id: string;
@@ -22,6 +15,7 @@ export interface CommunityPost {
     link: string;
     likes: string[];
     likeCount: number;
+    isPublic: boolean;
     createdAt: string;
 }
 
@@ -37,25 +31,19 @@ export interface CommunityResponse {
 
 export const communityService = {
     getPosts: async (page = 1, limit = 20): Promise<CommunityResponse> => {
-        const { data } = await axios.get(`${API_URL}/community`, {
-            params: { page, limit },
-        });
+        const { data } = await api.get("/community", { params: { page, limit } });
         return data;
     },
 
     getMyPosts: async (): Promise<{ posts: CommunityPost[] }> => {
-        const { data } = await axios.get(`${API_URL}/community/my`, {
-            headers: getAuthHeaders(),
-        });
+        const { data } = await api.get("/community/my");
         return data;
     },
 
     createPost: async (formData: FormData): Promise<CommunityPost> => {
-        const { data } = await axios.post(`${API_URL}/community`, formData, {
-            headers: {
-                ...getAuthHeaders(),
-                "Content-Type": "multipart/form-data",
-            },
+        // Pass Content-Type: undefined so axios/browser auto-sets multipart boundary
+        const { data } = await api.post("/community", formData, {
+            headers: { "Content-Type": undefined },
         });
         return data;
     },
@@ -68,27 +56,35 @@ export const communityService = {
         mimeType: string;
         mediaType: "image" | "video";
     }): Promise<CommunityPost> => {
-        const { data } = await axios.post(`${API_URL}/community/share`, payload, {
-            headers: {
-                ...getAuthHeaders(),
-                "Content-Type": "application/json",
-            },
-        });
+        const { data } = await api.post("/community/share", payload);
+        return data;
+    },
+
+    // ─── Auto-save generated ad using its existing Cloudinary URL ───────────
+    // No re-upload — video is already on Cloudinary from the generate pipeline
+    autoSave: async (payload: {
+        title: string;
+        description: string;
+        videoUrl: string;
+        cloudinaryId: string;
+        mediaType: "image" | "video";
+        link?: string;
+    }): Promise<CommunityPost> => {
+        const { data } = await api.post("/community/share-url", payload);
         return data;
     },
 
     deletePost: async (postId: string): Promise<void> => {
-        await axios.delete(`${API_URL}/community/${postId}`, {
-            headers: getAuthHeaders(),
-        });
+        await api.delete(`/community/${postId}`);
     },
 
     toggleLike: async (postId: string): Promise<{ liked: boolean; likeCount: number }> => {
-        const { data } = await axios.post(
-            `${API_URL}/community/${postId}/like`,
-            {},
-            { headers: getAuthHeaders() }
-        );
+        const { data } = await api.post(`/community/${postId}/like`);
+        return data;
+    },
+
+    toggleVisibility: async (postId: string): Promise<{ isPublic: boolean }> => {
+        const { data } = await api.patch(`/community/${postId}/visibility`);
         return data;
     },
 };
