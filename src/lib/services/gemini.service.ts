@@ -144,7 +144,7 @@ Rules:
   contents.push({ text: `${brandLine}Ad brief: ${prompt}` });
 
   const response = await genai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-3.1-flash-image-preview",
     contents,
   });
 
@@ -220,11 +220,91 @@ export async function generateVideo(
   }
 }
 
+// ─── Image Ad Generation ─────────────────────────────────────
+
+export async function generateAdImage(
+  prompt: string,
+  style: string,
+  brandName: string,
+  aspectRatio: string = "16:9",
+  productImageBuffer?: Buffer,
+  modelImageBuffer?: Buffer
+): Promise<Buffer> {
+  const genai = getAI();
+  const styleModifier = STYLE_PROMPTS[style] || "";
+  const brandLine = brandName ? `Brand: ${brandName}. ` : "";
+  const ratioDescMap: Record<string, string> = {
+    "16:9": "horizontal landscape (16:9), 1920×1080px, suitable for YouTube, Google Display, and widescreen banners",
+    "9:16": "vertical portrait (9:16), 1080×1920px, suitable for Instagram Stories, TikTok, and Reels",
+    "1:1": "square format (1:1), 1080×1080px, suitable for Instagram feed, Facebook feed, and versatile placements",
+    "4:5": "vertical format (4:5), 1080×1350px, suitable for Instagram feed, high-engagement social ads with maximum screen real estate",
+  };
+  const ratioDesc = ratioDescMap[aspectRatio] ?? ratioDescMap["16:9"];
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const contents: any[] = [];
+
+  if (productImageBuffer) {
+    contents.push({
+      inlineData: {
+        data: productImageBuffer.toString("base64"),
+        mimeType: "image/jpeg",
+      },
+    });
+    contents.push({
+      text: "Above is the product photo. Feature this exact product prominently in the advertisement.",
+    });
+  }
+
+  if (modelImageBuffer) {
+    contents.push({
+      inlineData: {
+        data: modelImageBuffer.toString("base64"),
+        mimeType: "image/jpeg",
+      },
+    });
+    contents.push({
+      text: "Above is the model/person to feature. Show this person interacting with or holding the product.",
+    });
+  }
+
+  contents.push({
+    text: [
+      `Create a professional social media advertisement image.`,
+      `${brandLine}Style: ${style} — ${styleModifier}.`,
+      `Format: ${ratioDesc}.`,
+      `Ad brief: ${prompt}`,
+      `Requirements: high production quality, eye-catching composition, suitable for paid social media advertising,`,
+      `studio lighting, commercial grade. Do NOT add any text, logos, or watermarks — clean visual only.`,
+    ].join(" "),
+  });
+
+  const response = await genai.models.generateContent({
+    model: "gemini-3.1-flash-image-preview",
+    contents,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    config: { responseModalities: ["TEXT", "IMAGE"] } as any,
+  });
+
+  const parts = response.candidates?.[0]?.content?.parts;
+  if (parts) {
+    for (const part of parts) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((part as any).inlineData?.data) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return Buffer.from((part as any).inlineData.data, "base64");
+      }
+    }
+  }
+
+  throw new Error("Gemini returned no image data. Check that responseModalities includes 'image'.");
+}
+
 export async function generateThumbnail(prompt: string): Promise<Buffer> {
   const genai = getAI();
 
   const response = await genai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-3.1-flash-image-preview",
     contents: [
       {
         text: `Generate a high-quality thumbnail image for this video ad: ${prompt}. 
@@ -232,7 +312,7 @@ Make it eye-catching, professional studio lighting, ecommerce quality.`,
       },
     ],
     config: {
-      responseModalities: ["image", "text"],
+      responseModalities: ["TEXT", "IMAGE"],
     },
   });
 
