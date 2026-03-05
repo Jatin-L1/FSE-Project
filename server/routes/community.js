@@ -50,12 +50,12 @@ router.get("/", async (req, res) => {
         const skip = (page - 1) * limit;
 
         const [posts, total] = await Promise.all([
-            Post.find()
+            Post.find({ isPublic: true })
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
                 .populate("user", "name avatar email"),
-            Post.countDocuments(),
+            Post.countDocuments({ isPublic: true }),
         ]);
 
         res.json({
@@ -109,6 +109,41 @@ router.post("/", auth, upload.single("image"), async (req, res) => {
 });
 
 // ──────────────────────────────────────────────────────
+// POST /api/community/share-url — Auto-save generated ad
+// Uses existing Cloudinary URL — no re-upload
+// ──────────────────────────────────────────────────────
+router.post("/share-url", auth, express.json(), async (req, res) => {
+    try {
+        const { title, description, link, videoUrl, cloudinaryId, mediaType } = req.body;
+
+        if (!title || !title.trim()) {
+            return res.status(400).json({ message: "Title is required." });
+        }
+        if (!videoUrl || !cloudinaryId) {
+            return res.status(400).json({ message: "videoUrl and cloudinaryId are required." });
+        }
+
+        const resType = mediaType === "video" ? "video" : "image";
+
+        const post = await Post.create({
+            user: req.user.id,
+            title: title.trim(),
+            description: (description || "").trim(),
+            imageUrl: videoUrl,
+            cloudinaryId,
+            mediaType: resType,
+            link: (link || "").trim(),
+        });
+
+        await post.populate("user", "name avatar email");
+        res.status(201).json(post);
+    } catch (err) {
+        console.error("Share-url post error:", err);
+        res.status(500).json({ message: "Failed to auto-save to community." });
+    }
+});
+
+// ──────────────────────────────────────────────────────
 // POST /api/community/share — Share generated ad (base64)
 // Called from the generator page after generating an ad
 // ──────────────────────────────────────────────────────
@@ -158,6 +193,25 @@ router.get("/my", auth, async (req, res) => {
     } catch (err) {
         console.error("Get my posts error:", err);
         res.status(500).json({ message: "Failed to fetch your posts." });
+    }
+});
+
+// ──────────────────────────────────────────────────────
+// PATCH /api/community/:id/visibility — Toggle public/private (auth, own post)
+// ──────────────────────────────────────────────────────
+router.patch("/:id/visibility", auth, async (req, res) => {
+    try {
+        const post = await Post.findById(req.params.id);
+        if (!post) return res.status(404).json({ message: "Post not found." });
+        if (post.user.toString() !== req.user.id)
+            return res.status(403).json({ message: "Not authorized." });
+
+        post.isPublic = !post.isPublic;
+        await post.save();
+        res.json({ isPublic: post.isPublic });
+    } catch (err) {
+        console.error("Toggle visibility error:", err);
+        res.status(500).json({ message: "Failed to update visibility." });
     }
 });
 
