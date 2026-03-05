@@ -43,6 +43,10 @@ const postSchema = new mongoose.Schema(
                 ref: "User",
             },
         ],
+        isPublic: {
+            type: Boolean,
+            default: true,
+        },
     },
     {
         timestamps: true,
