@@ -13,7 +13,7 @@ const navLinks = [
     { label: "Features", href: "#features" },
     { label: "Generator", href: "/generator" },
     { label: "Community", href: "/community" },
-    { label: "Pricing", href: "#pricing" },
+    { label: "Pricing", href: "/pricing" },
 ];
 
 export function Navbar() {
