@@ -1,0 +1,1 @@
+globalThis.__RSC_MANIFEST=(globalThis.__RSC_MANIFEST||{});globalThis.__RSC_MANIFEST["/api/v1/generate-ad/route"]={"moduleLoading":{"prefix":"/_next/"},"ssrModuleMapping":{},"edgeSSRModuleMapping":{},"clientModules":{},"entryCSSFiles":{"D:\\Ai_Ads\\src\\":[],"D:\\Ai_Ads\\src\\app\\api\\v1\\generate-ad\\route":[]},"rscModuleMapping":{},"edgeRscModuleMapping":{}}

@@ -229,7 +229,7 @@ export default function GeneratorPage() {
                                     AI Ad Generator
                                 </h1>
                                 <p className="text-text-secondary mt-2">
-                                    Upload your product — AI creates a {generationType === "video" ? "video" : "image"} ad with Gemini
+                                    Upload your product — AI creates a {generationType === "video" ? "video" : "image"} ad with Freepik
                                 </p>
                             </div>
                             {/* Credits indicator */}
@@ -656,15 +656,24 @@ export default function GeneratorPage() {
                                             >
                                                 {/* Video Player — CDN URL */}
                                                 <div className="flex-1 flex items-center justify-center p-4 bg-black/40">
-                                                    <video
-                                                        ref={videoRef}
-                                                        src={generationResult.videoUrl}
-                                                        controls
-                                                        autoPlay
-                                                        loop
-                                                        playsInline
-                                                        className="max-w-full max-h-[500px] rounded-xl shadow-2xl"
-                                                    />
+                                                    {generationResult.videoUrl.endsWith('.mp4') || generationResult.videoUrl.includes('/video/upload/') ? (
+                                                        <video
+                                                            ref={videoRef}
+                                                            src={generationResult.videoUrl}
+                                                            controls
+                                                            autoPlay
+                                                            loop
+                                                            playsInline
+                                                            className="max-w-full max-h-[500px] rounded-xl shadow-2xl"
+                                                        />
+                                                    ) : (
+                                                        // eslint-disable-next-line @next/next/no-img-element
+                                                        <img
+                                                            src={generationResult.videoUrl}
+                                                            alt="Generated Ad"
+                                                            className="max-w-full max-h-[500px] rounded-xl shadow-2xl object-contain"
+                                                        />
+                                                    )}
                                                 </div>
 
                                                 {/* Ad Details & Actions */}
@@ -691,7 +700,9 @@ export default function GeneratorPage() {
                                                                 onClick={() => {
                                                                     const link = document.createElement("a");
                                                                     link.href = generationResult.videoUrl;
-                                                                    link.download = `${(brandName || "ad").replace(/\s+/g, "-")}-${generationResult.generationId.slice(0, 8)}.mp4`;
+                                                                    const isVideo = generationResult.videoUrl.endsWith('.mp4') || generationResult.videoUrl.includes('/video/upload/');
+                                                                    const ext = isVideo ? "mp4" : "jpg";
+                                                                    link.download = `${(brandName || "ad").replace(/\s+/g, "-")}-${generationResult.generationId.slice(0, 8)}.${ext}`;
                                                                     link.target = "_blank";
                                                                     link.click();
                                                                 }}
@@ -699,7 +710,7 @@ export default function GeneratorPage() {
                                                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                                                                 </svg>
-                                                                Download MP4
+                                                                Download
                                                             </Button>
                                                             <Button variant="outline" size="sm" onClick={openShareModal}>
                                                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

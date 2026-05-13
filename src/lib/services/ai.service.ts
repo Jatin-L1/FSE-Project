@@ -1,4 +1,4 @@
-import { enhancePrompt, generateVideo } from "./gemini.service";
+import { enhancePrompt, generateMedia } from "./freepik.service";
 import { uploadVideo, uploadImage } from "./cloudinary.service";
 
 export interface AdVideoResult {
@@ -46,18 +46,17 @@ export class AIService {
       modelImageBuffer
     );
 
-    const videoBuffer = await generateVideo(
+    const mediaBuffer = await generateMedia(
       enhancedPrompt,
-      duration,
       aspectRatio,
       productImageBuffer
     );
 
-    const uploaded = await uploadVideo(videoBuffer);
+    const uploaded = await uploadImage(mediaBuffer);
 
     return {
-      videoUrl: uploaded.videoUrl,
-      thumbnailUrl: uploaded.thumbnailUrl,
+      videoUrl: uploaded.imageUrl, // Map it to videoUrl since frontend uses it
+      thumbnailUrl: uploaded.imageUrl,
       cloudinaryPublicId: uploaded.publicId,
       productImageUrl,
       modelImageUrl,
