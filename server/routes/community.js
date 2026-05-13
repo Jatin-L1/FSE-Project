@@ -112,7 +112,7 @@ router.post("/", auth, upload.single("image"), async (req, res) => {
 // POST /api/community/share — Share generated ad (base64)
 // Called from the generator page after generating an ad
 // ──────────────────────────────────────────────────────
-router.post("/share", auth, express.json({ limit: "20mb" }), async (req, res) => {
+router.post("/share", auth, async (req, res) => {
     try {
         const { title, description, link, imageBase64, mimeType, mediaType } = req.body;
 
@@ -121,6 +121,12 @@ router.post("/share", auth, express.json({ limit: "20mb" }), async (req, res) =>
         }
         if (!imageBase64) {
             return res.status(400).json({ message: "Image/video data is required." });
+        }
+
+        // Guard against excessively large payloads (25 MB base64 ≈ ~18.75 MB raw)
+        const maxBase64Length = 25 * 1024 * 1024;
+        if (imageBase64.length > maxBase64Length) {
+            return res.status(413).json({ message: "File too large. Maximum size is ~18 MB." });
         }
 
         // Convert base64 to buffer and upload to Cloudinary
@@ -142,7 +148,10 @@ router.post("/share", auth, express.json({ limit: "20mb" }), async (req, res) =>
         res.status(201).json(post);
     } catch (err) {
         console.error("Share post error:", err);
-        res.status(500).json({ message: "Failed to share to community." });
+        const message = process.env.NODE_ENV === "production"
+            ? "Failed to share to community."
+            : `Failed to share: ${err.message || err}`;
+        res.status(500).json({ message });
     }
 });
 

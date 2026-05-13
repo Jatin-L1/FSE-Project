@@ -57,6 +57,7 @@ export default function GeneratorPage() {
     const [shareLink, setShareLink] = useState("");
     const [sharing, setSharing] = useState(false);
     const [shared, setShared] = useState(false);
+    const [shareError, setShareError] = useState<string | null>(null);
 
     const productInputRef = useRef<HTMLInputElement>(null);
     const modelInputRef = useRef<HTMLInputElement>(null);
@@ -174,34 +175,53 @@ export default function GeneratorPage() {
         setShareDesc(productDescription);
         setShareLink("");
         setShared(false);
+        setShareError(null);
         setShowShareModal(true);
     };
 
     const handleShare = async () => {
         if (!generationResult || !shareTitle.trim()) return;
         setSharing(true);
+        setShareError(null);
         try {
-            // Fetch the Cloudinary video and convert to base64 for community sharing
+            // Fetch the generated media and convert to base64 for community sharing
             const res = await fetch(generationResult.videoUrl);
+            if (!res.ok) throw new Error("Failed to fetch the generated media.");
             const blob = await res.blob();
+
+            // Check size before encoding — warn if too large
+            const MAX_SHARE_SIZE = 18 * 1024 * 1024; // ~18 MB
+            if (blob.size > MAX_SHARE_SIZE) {
+                setShareError("File is too large to share (max ~18 MB). Try sharing an image ad instead.");
+                setSharing(false);
+                return;
+            }
+
             const base64 = await new Promise<string>((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = () => resolve((reader.result as string).split(",")[1]);
                 reader.onerror = reject;
                 reader.readAsDataURL(blob);
             });
+
+            // Determine the correct media type and MIME based on what was generated
+            const isVideo = generationType === "video";
             await communityService.shareFromGenerator({
                 title: shareTitle.trim(),
                 description: shareDesc.trim(),
                 link: shareLink.trim(),
                 imageBase64: base64,
-                mimeType: "video/mp4",
-                mediaType: "video",
+                mimeType: isVideo ? "video/mp4" : blob.type || "image/jpeg",
+                mediaType: isVideo ? "video" : "image",
             });
             setShared(true);
             setTimeout(() => setShowShareModal(false), 1500);
-        } catch (err) {
+        } catch (err: unknown) {
             console.error("Share failed:", err);
+            const message =
+                (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+                (err instanceof Error ? err.message : "Failed to share. Please try again.");
+            setShareError(message);
         } finally {
             setSharing(false);
         }
@@ -811,6 +831,11 @@ export default function GeneratorPage() {
                                             className="w-full bg-surface-light/80 border border-border rounded-xl px-4 py-3 text-text-primary placeholder-text-muted text-sm outline-none focus:border-accent-purple/50 transition-all"
                                         />
                                     </div>
+                                    {shareError && (
+                                        <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                                            <p className="text-sm text-red-400">{shareError}</p>
+                                        </div>
+                                    )}
                                     <div className="flex gap-3">
                                         <Button variant="outline" onClick={() => setShowShareModal(false)} disabled={sharing} fullWidth>
                                             Cancel
