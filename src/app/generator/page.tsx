@@ -23,6 +23,7 @@ interface GenerationResult {
     success: boolean;
     videoUrl: string;
     generationId: string;
+    cloudinaryPublicId: string | null;
 }
 
 export default function GeneratorPage() {
@@ -144,6 +145,7 @@ export default function GeneratorPage() {
                 success: data.success,
                 videoUrl: data.videoUrl,
                 generationId: data.generationId,
+                cloudinaryPublicId: data.cloudinaryPublicId ?? null,
             });
 
             // Deduct credit after successful generation
@@ -181,27 +183,22 @@ export default function GeneratorPage() {
         if (!generationResult || !shareTitle.trim()) return;
         setSharing(true);
         try {
-            // Fetch the Cloudinary video and convert to base64 for community sharing
-            const res = await fetch(generationResult.videoUrl);
-            const blob = await res.blob();
-            const base64 = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve((reader.result as string).split(",")[1]);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
+            const isVideoUrl = generationResult.videoUrl.endsWith('.mp4') || generationResult.videoUrl.includes('/video/');
             await communityService.shareFromGenerator({
                 title: shareTitle.trim(),
                 description: shareDesc.trim(),
                 link: shareLink.trim(),
-                imageBase64: base64,
-                mimeType: "video/mp4",
-                mediaType: "video",
+                videoUrl: generationResult.videoUrl,
+                cloudinaryPublicId: generationResult.cloudinaryPublicId,
+                mediaType: isVideoUrl ? "video" : "image",
             });
             setShared(true);
             setTimeout(() => setShowShareModal(false), 1500);
         } catch (err) {
-            console.error("Share failed:", err);
+            const message =
+                (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+                (err instanceof Error ? err.message : "Share failed");
+            console.error("Share failed:", message);
         } finally {
             setSharing(false);
         }

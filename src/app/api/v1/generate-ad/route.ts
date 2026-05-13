@@ -131,6 +131,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       videoUrl: result.videoUrl,
+      cloudinaryPublicId: result.cloudinaryPublicId,
       generationId,
     });
   } catch (error) {
