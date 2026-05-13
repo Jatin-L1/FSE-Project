@@ -8,16 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { userService } from "@/services/user";
 import { communityService } from "@/services/community";
 
-const adStyles = [
-    { id: "luxury", label: "Luxury", icon: "✨" },
-    { id: "bold", label: "Bold", icon: "🔥" },
-    { id: "minimal", label: "Minimal", icon: "◯" },
-    { id: "cinematic", label: "Cinematic", icon: "🎬" },
-    { id: "playful", label: "Playful", icon: "🎨" },
-    { id: "corporate", label: "Corporate", icon: "💼" },
-];
 
-const aspectRatios = ["16:9", "9:16"];
 
 interface GenerationResult {
     success: boolean;
@@ -32,14 +23,13 @@ export default function GeneratorPage() {
     // Form state
     const [brandName, setBrandName] = useState("");
     const [productDescription, setProductDescription] = useState("");
-    const [generationType, setGenerationType] = useState<"image" | "video">("image");
-    const [selectedStyle, setSelectedStyle] = useState("luxury");
-    const [selectedRatio, setSelectedRatio] = useState("16:9");
-    const [selectedDuration, setSelectedDuration] = useState(6);
+    const [generationType] = useState<"image" | "video">("image");
+    const [selectedStyle] = useState("cinematic");
+    const [selectedRatio] = useState("16:9");
+    const [selectedDuration] = useState(6);
     const [productPhoto, setProductPhoto] = useState<File | null>(null);
     const [productPreview, setProductPreview] = useState<string | null>(null);
-    const [modelPhoto, setModelPhoto] = useState<File | null>(null);
-    const [modelPreview, setModelPreview] = useState<string | null>(null);
+
     const [uploadError, setUploadError] = useState<string | null>(null);
 
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -60,7 +50,6 @@ export default function GeneratorPage() {
     const [shared, setShared] = useState(false);
 
     const productInputRef = useRef<HTMLInputElement>(null);
-    const modelInputRef = useRef<HTMLInputElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -97,18 +86,7 @@ export default function GeneratorPage() {
         setProductPreview(URL.createObjectURL(file));
     };
 
-    const handleModelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        if (isFreeUser && file.size > MAX_FILE_SIZE) {
-            setUploadError("Image exceeds 10 MB. Upgrade to Pro for larger uploads.");
-            e.target.value = "";
-            return;
-        }
-        setUploadError(null);
-        setModelPhoto(file);
-        setModelPreview(URL.createObjectURL(file));
-    };
+
 
     const handleGenerate = async () => {
         if (!productDescription.trim() || !productPhoto) return;
@@ -126,9 +104,7 @@ export default function GeneratorPage() {
             formData.append("style", selectedStyle);
             formData.append("aspectRatio", selectedRatio);
             formData.append("duration", String(selectedDuration));
-            if (modelPhoto) {
-                formData.append("modelPhoto", modelPhoto);
-            }
+
 
             const response = await fetch("/api/v1/generate-ad", {
                 method: "POST",
@@ -331,167 +307,7 @@ export default function GeneratorPage() {
                                 </div>
                             </div>
 
-                            {/* Model Photo Upload (Optional) */}
-                            <div className="glass rounded-2xl p-6">
-                                <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">
-                                    Model Photo <span className="text-text-muted text-xs font-normal normal-case">(optional)</span>
-                                </h3>
-                                <div
-                                    onClick={() => modelInputRef.current?.click()}
-                                    className="border-2 border-dashed border-border hover:border-accent-indigo/40 rounded-xl p-6 text-center cursor-pointer transition-all duration-300 group"
-                                >
-                                    <input
-                                        ref={modelInputRef}
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={handleModelUpload}
-                                        aria-label="Upload model photo"
-                                    />
-                                    {modelPreview ? (
-                                        <div className="relative">
-                                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                                            <img src={modelPreview} alt="Model" className="w-full h-40 object-contain rounded-lg" />
-                                            <div className="flex justify-center gap-2 mt-2">
-                                                <p className="text-xs text-text-muted">Click to change</p>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); setModelPhoto(null); setModelPreview(null); }}
-                                                    className="text-xs text-red-400 hover:text-red-300"
-                                                >
-                                                    Remove
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <div className="w-12 h-12 mx-auto rounded-2xl bg-surface-light flex items-center justify-center mb-3 group-hover:bg-accent-indigo/10 transition-colors">
-                                                <svg className="w-6 h-6 text-text-muted group-hover:text-accent-indigo transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                                                </svg>
-                                            </div>
-                                            <p className="text-sm text-text-secondary">
-                                                Drop model image or <span className="text-accent-indigo">browse</span>
-                                            </p>
-                                            <p className="text-xs text-text-muted mt-1">For ads with a human model</p>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
 
-                            {/* Style Selector */}
-                            <div className="glass rounded-2xl p-6">
-                                <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">
-                                    Ad Style
-                                </h3>
-                                <div className="grid grid-cols-2 gap-3">
-                                    {adStyles.map((style) => (
-                                        <button
-                                            key={style.id}
-                                            onClick={() => setSelectedStyle(style.id)}
-                                            className={`
-                                                flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-300 text-sm font-medium cursor-pointer
-                                                ${selectedStyle === style.id
-                                                    ? "border-accent-purple/60 bg-accent-purple/10 text-text-primary shadow-[0_0_20px_rgba(124,58,237,0.15)]"
-                                                    : "border-border bg-surface-light/50 text-text-secondary hover:border-accent-purple/30"
-                                                }
-                                            `}
-                                        >
-                                            <span className="text-lg">{style.icon}</span>
-                                            {style.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Generation Type Toggle */}
-                            <div className="glass rounded-2xl p-6">
-                                <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">
-                                    Output Type
-                                </h3>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        onClick={() => setGenerationType("image")}
-                                        className={`
-                                            flex flex-col items-center gap-2 px-4 py-4 rounded-xl border transition-all duration-300 text-sm font-medium cursor-pointer
-                                            ${generationType === "image"
-                                                ? "border-accent-purple/60 bg-accent-purple/10 text-text-primary shadow-[0_0_20px_rgba(124,58,237,0.15)]"
-                                                : "border-border bg-surface-light/50 text-text-secondary hover:border-accent-purple/30"
-                                            }
-                                        `}
-                                    >
-                                        <span className="text-2xl">🖼️</span>
-                                        <span>Image Ad</span>
-                                        <span className="text-xs text-text-muted">~15 seconds</span>
-                                    </button>
-                                    <button
-                                        onClick={() => setGenerationType("video")}
-                                        className={`
-                                            flex flex-col items-center gap-2 px-4 py-4 rounded-xl border transition-all duration-300 text-sm font-medium cursor-pointer
-                                            ${generationType === "video"
-                                                ? "border-accent-purple/60 bg-accent-purple/10 text-text-primary shadow-[0_0_20px_rgba(124,58,237,0.15)]"
-                                                : "border-border bg-surface-light/50 text-text-secondary hover:border-accent-purple/30"
-                                            }
-                                        `}
-                                    >
-                                        <span className="text-2xl">🎬</span>
-                                        <span>Video Ad</span>
-                                        <span className="text-xs text-text-muted">~2-3 minutes</span>
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Format & Duration */}
-                            <div className="glass rounded-2xl p-6">
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div>
-                                        <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3">
-                                            Format
-                                        </h3>
-                                        <div className="flex flex-wrap gap-2">
-                                            {aspectRatios.map((r) => (
-                                                <button
-                                                    key={r}
-                                                    onClick={() => setSelectedRatio(r)}
-                                                    className={`
-                                                        px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer
-                                                        ${selectedRatio === r
-                                                            ? "bg-accent-purple text-white"
-                                                            : "bg-surface-light text-text-muted hover:text-text-secondary"
-                                                        }
-                                                    `}
-                                                >
-                                                    {r}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3">
-                                            Duration
-                                        </h3>
-                                        <div className="space-y-3">
-                                            <input
-                                                type="range"
-                                                min={4}
-                                                max={12}
-                                                step={1}
-                                                value={selectedDuration}
-                                                onChange={(e) => setSelectedDuration(Number(e.target.value))}
-                                                className="duration-slider w-full"
-                                                style={{
-                                                    background: `linear-gradient(90deg, var(--accent-purple) 0%, var(--accent-indigo) ${((selectedDuration - 4) / 8) * 100}%, var(--surface-light) ${((selectedDuration - 4) / 8) * 100}%)`,
-                                                }}
-                                                aria-label="Video duration"
-                                            />
-                                            <div className="flex justify-between text-xs text-text-muted">
-                                                <span>4s</span>
-                                                <span className="text-accent-purple font-semibold text-sm">{selectedDuration}s</span>
-                                                <span>12s</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
 
                             {/* Generate Button */}
                             <div className="relative">
