@@ -51,6 +51,7 @@ export async function GET(
       progress: generation.progress,
       videoUrl: generation.videoUrl,
       thumbnailUrl: generation.thumbnailUrl,
+      cloudinaryPublicId: generation.cloudinaryPublicId,
     });
   } catch (error) {
     console.error("GET /api/v1/generate-ad/[id] error:", error);

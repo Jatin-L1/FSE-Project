@@ -40,6 +40,27 @@ const uploadToCloudinary = (buffer, resourceType = "image", folder = "ai-ads-com
     });
 };
 
+const uploadRemoteToCloudinary = (remoteUrl, resourceType = "image", folder = "ai-ads-community") => {
+    return new Promise((resolve, reject) => {
+        const options = {
+            folder,
+            resource_type: resourceType,
+        };
+
+        if (resourceType === "image") {
+            options.transformation = [
+                { width: 1200, height: 1200, crop: "limit" },
+                { quality: "auto", fetch_format: "auto" },
+            ];
+        }
+
+        cloudinary.uploader.upload(remoteUrl, options, (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+        });
+    });
+};
+
 // ──────────────────────────────────────────────────────
 // GET /api/community — List all posts (PUBLIC, no auth)
 // ──────────────────────────────────────────────────────
@@ -87,7 +108,7 @@ router.post("/", auth, upload.single("image"), async (req, res) => {
             return res.status(400).json({ message: "Title is required." });
         }
 
-        const resType = mediaType === "video" ? "video" : "image";
+        const resType = req.file.mimetype.startsWith("video/") ? "video" : "image";
         const result = await uploadToCloudinary(req.file.buffer, resType);
 
         const post = await Post.create({
@@ -114,7 +135,15 @@ router.post("/", auth, upload.single("image"), async (req, res) => {
 // ──────────────────────────────────────────────────────
 router.post("/share", auth, async (req, res) => {
     try {
-        const { title, description, link, imageBase64, mimeType, mediaType } = req.body;
+        const {
+            title,
+            description,
+            link,
+            imageBase64,
+            videoUrl,
+            cloudinaryPublicId,
+            mediaType,
+        } = req.body;
 
         if (!title || !title.trim()) {
             return res.status(400).json({ message: "Title is required." });
@@ -138,8 +167,8 @@ router.post("/share", auth, async (req, res) => {
             user: req.user.id,
             title: title.trim(),
             description: (description || "").trim(),
-            imageUrl: result.secure_url,
-            cloudinaryId: result.public_id,
+            imageUrl,
+            cloudinaryId,
             mediaType: resType,
             link: (link || "").trim(),
         });

@@ -23,6 +23,7 @@ interface GenerationResult {
     success: boolean;
     videoUrl: string;
     generationId: string;
+    cloudinaryPublicId: string | null;
 }
 
 export default function GeneratorPage() {
@@ -145,6 +146,7 @@ export default function GeneratorPage() {
                 success: data.success,
                 videoUrl: data.videoUrl,
                 generationId: data.generationId,
+                cloudinaryPublicId: data.cloudinaryPublicId ?? null,
             });
 
             // Deduct credit after successful generation
@@ -184,34 +186,14 @@ export default function GeneratorPage() {
         setSharing(true);
         setShareError(null);
         try {
-            // Fetch the generated media and convert to base64 for community sharing
-            const res = await fetch(generationResult.videoUrl);
-            if (!res.ok) throw new Error("Failed to fetch the generated media.");
-            const blob = await res.blob();
-
-            // Check size before encoding — warn if too large
-            const MAX_SHARE_SIZE = 18 * 1024 * 1024; // ~18 MB
-            if (blob.size > MAX_SHARE_SIZE) {
-                setShareError("File is too large to share (max ~18 MB). Try sharing an image ad instead.");
-                setSharing(false);
-                return;
-            }
-
-            const base64 = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve((reader.result as string).split(",")[1]);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-
-            // Determine the correct media type and MIME based on what was generated
+            // Determine the correct media type based on what was generated
             const isVideo = generationType === "video";
             await communityService.shareFromGenerator({
                 title: shareTitle.trim(),
                 description: shareDesc.trim(),
                 link: shareLink.trim(),
-                imageBase64: base64,
-                mimeType: isVideo ? "video/mp4" : blob.type || "image/jpeg",
+                videoUrl: generationResult.videoUrl,
+                cloudinaryPublicId: generationResult.cloudinaryPublicId,
                 mediaType: isVideo ? "video" : "image",
             });
             setShared(true);
