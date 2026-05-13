@@ -64,8 +64,8 @@ export const communityService = {
         title: string;
         description: string;
         link: string;
-        imageBase64: string;
-        mimeType: string;
+        videoUrl: string;
+        cloudinaryPublicId: string | null;
         mediaType: "image" | "video";
     }): Promise<CommunityPost> => {
         const { data } = await axios.post(`${API_URL}/community/share`, payload, {
