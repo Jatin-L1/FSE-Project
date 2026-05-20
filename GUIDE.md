@@ -3336,7 +3336,7 @@ Client                          Server
 MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/aiads
 JWT_SECRET=a8f5f167f44f4964e6c998dee827110c
 CLOUDINARY_URL=cloudinary://key:secret@cloud_name
-FREEPIK_API_KEY=FPSX6316e26277284161bd86d938cb679648
+FREEPIK_API_KEY=your_freepik_api_key_here
 GOOGLE_CLIENT_ID=123456789-abc.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=GOCSPX-abc123def456
 CLIENT_URL=http://localhost:3000

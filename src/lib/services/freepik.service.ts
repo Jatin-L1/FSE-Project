@@ -12,7 +12,7 @@ const STYLE_PROMPTS: Record<string, string> = {
 };
 
 function getApiKey(): string {
-  const key = process.env.FREEPIK_API_KEY || "FPSX6316e26277284161bd86d938cb679648";
+  const key = process.env.FREEPIK_API_KEY || "your_freepik_api_key_here";
   if (!key) {
     throw new Error("FREEPIK_API_KEY environment variable is not set.");
   }
