@@ -130,8 +130,9 @@ router.post("/", auth, upload.single("image"), async (req, res) => {
 });
 
 // ──────────────────────────────────────────────────────
-// POST /api/community/share — Share generated ad (base64)
+// POST /api/community/share — Share generated ad
 // Called from the generator page after generating an ad
+// Accepts either imageBase64 OR videoUrl+cloudinaryPublicId
 // ──────────────────────────────────────────────────────
 router.post("/share", auth, async (req, res) => {
     try {
@@ -169,7 +170,7 @@ router.post("/share", auth, async (req, res) => {
             description: (description || "").trim(),
             imageUrl,
             cloudinaryId,
-            mediaType: resType,
+            mediaType: mediaType || "image",
             link: (link || "").trim(),
         });
 
