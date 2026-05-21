@@ -69,11 +69,9 @@ function GeneratorPageInner() {
     useEffect(() => {
         const paid = searchParams.get("paid");
         if (paid === "true") {
-            // User just paid successfully — they can generate now
-            // Remove the query param from the URL without reload
-            const url = new URL(window.location.href);
-            url.searchParams.delete("paid");
-            window.history.replaceState({}, "", url.toString());
+            // User just paid successfully — keep the param until they generate
+            // Don't remove it yet, we need it in handleGenerate
+            console.log("User returned from successful payment");
         }
     }, [searchParams]);
 
@@ -112,15 +110,23 @@ function GeneratorPageInner() {
         if (!productDescription.trim() || !productPhoto) return;
         if (!hasCredits) return;
 
-        // Check if payment is needed
-        if (!isFirstGeneration) {
-            // Show payment modal for subsequent generations
-            setShowPaymentModal(true);
+        // Check if this is the first generation (free)
+        if (isFirstGeneration) {
+            // First generation is free — proceed directly
+            await executeGeneration(true);
             return;
         }
 
-        // First generation is free — proceed directly
-        await executeGeneration(true);
+        // For subsequent generations, check if user just paid
+        const justPaid = searchParams.get("paid") === "true";
+        if (justPaid) {
+            // User just completed payment, allow generation
+            await executeGeneration(false);
+            return;
+        }
+
+        // Otherwise, show payment modal
+        setShowPaymentModal(true);
     };
 
     const handlePayAndGenerate = async () => {
@@ -156,6 +162,13 @@ function GeneratorPageInner() {
         setGenError(null);
         setGenerationResult(null);
         setShowPaymentModal(false);
+
+        // Clear the ?paid=true parameter if present
+        const url = new URL(window.location.href);
+        if (url.searchParams.has("paid")) {
+            url.searchParams.delete("paid");
+            window.history.replaceState({}, "", url.toString());
+        }
 
         try {
             const formData = new FormData();
@@ -195,6 +208,9 @@ function GeneratorPageInner() {
                     // Optimistic update
                     updateGenerationCount(1);
                 }
+            } else {
+                // Paid generation - increment count optimistically
+                updateGenerationCount((user?.generationCount ?? 1) + 1);
             }
 
             // Deduct credit after successful generation
