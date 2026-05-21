@@ -48,7 +48,6 @@ function GeneratorPageInner() {
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [isInitiatingPayment, setIsInitiatingPayment] = useState(false);
     const [paymentError, setPaymentError] = useState<string | null>(null);
-    const [justPaid, setJustPaid] = useState(false); // Track if user just completed payment
 
     // Share to community state
     const [showShareModal, setShowShareModal] = useState(false);
@@ -70,11 +69,8 @@ function GeneratorPageInner() {
     useEffect(() => {
         const paid = searchParams.get("paid");
         if (paid === "true") {
-            // User just paid successfully
-            setJustPaid(true);
-            console.log("User returned from successful payment");
-            
-            // Clear the parameter from URL
+            // User just paid successfully — they can generate now
+            // Remove the query param from the URL without reload
             const url = new URL(window.location.href);
             url.searchParams.delete("paid");
             window.history.replaceState({}, "", url.toString());
@@ -116,23 +112,15 @@ function GeneratorPageInner() {
         if (!productDescription.trim() || !productPhoto) return;
         if (!hasCredits) return;
 
-        // Check if user just paid (tracked in state)
-        if (justPaid) {
-            // User just completed payment, allow generation
-            setJustPaid(false); // Clear the flag after using it
-            await executeGeneration(false);
+        // Check if payment is needed
+        if (!isFirstGeneration) {
+            // Show payment modal for subsequent generations
+            setShowPaymentModal(true);
             return;
         }
 
-        // Check if this is the first generation (free)
-        if (isFirstGeneration) {
-            // First generation is free — proceed directly
-            await executeGeneration(true);
-            return;
-        }
-
-        // For subsequent generations, show payment modal
-        setShowPaymentModal(true);
+        // First generation is free — proceed directly
+        await executeGeneration(true);
     };
 
     const handlePayAndGenerate = async () => {
@@ -208,8 +196,6 @@ function GeneratorPageInner() {
                     updateGenerationCount(1);
                 }
             }
-            // Note: For paid generations, the count was already incremented during payment verification
-            // So we don't increment it again here
 
             // Deduct credit after successful generation
             try {

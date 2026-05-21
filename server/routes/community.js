@@ -149,39 +149,20 @@ router.post("/share", auth, async (req, res) => {
         if (!title || !title.trim()) {
             return res.status(400).json({ message: "Title is required." });
         }
+        if (!imageBase64) {
+            return res.status(400).json({ message: "Image/video data is required." });
+        }
 
-        let imageUrl, cloudinaryId;
+        // Guard against excessively large payloads (25 MB base64 ≈ ~18.75 MB raw)
+        const maxBase64Length = 25 * 1024 * 1024;
+        if (imageBase64.length > maxBase64Length) {
+            return res.status(413).json({ message: "File too large. Maximum size is ~18 MB." });
+        }
 
-        // Case 1: Already uploaded to Cloudinary (from generator)
-        if (videoUrl && cloudinaryPublicId) {
-            imageUrl = videoUrl;
-            cloudinaryId = cloudinaryPublicId;
-        }
-        // Case 2: Base64 data provided (legacy/direct upload)
-        else if (imageBase64) {
-            // Guard against excessively large payloads (25 MB base64 ≈ ~18.75 MB raw)
-            const maxBase64Length = 25 * 1024 * 1024;
-            if (imageBase64.length > maxBase64Length) {
-                return res.status(413).json({ message: "File too large. Maximum size is ~18 MB." });
-            }
-
-            // Convert base64 to buffer and upload to Cloudinary
-            const buffer = Buffer.from(imageBase64, "base64");
-            const resType = mediaType === "video" ? "video" : "image";
-            const result = await uploadToCloudinary(buffer, resType);
-            imageUrl = result.secure_url;
-            cloudinaryId = result.public_id;
-        }
-        // Case 3: videoUrl provided but no cloudinaryPublicId (re-upload from URL)
-        else if (videoUrl) {
-            const resType = mediaType === "video" ? "video" : "image";
-            const result = await uploadRemoteToCloudinary(videoUrl, resType);
-            imageUrl = result.secure_url;
-            cloudinaryId = result.public_id;
-        }
-        else {
-            return res.status(400).json({ message: "Image/video data is required (imageBase64, videoUrl, or cloudinaryPublicId)." });
-        }
+        // Convert base64 to buffer and upload to Cloudinary
+        const buffer = Buffer.from(imageBase64, "base64");
+        const resType = mediaType === "video" ? "video" : "image";
+        const result = await uploadToCloudinary(buffer, resType);
 
         const post = await Post.create({
             user: req.user.id,
