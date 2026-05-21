@@ -130,10 +130,11 @@ router.post("/", auth, upload.single("image"), async (req, res) => {
 });
 
 // ──────────────────────────────────────────────────────
-// POST /api/community/share — Share generated ad (base64)
+// POST /api/community/share — Share generated ad
 // Called from the generator page after generating an ad
+// Accepts either imageBase64 OR videoUrl+cloudinaryPublicId
 // ──────────────────────────────────────────────────────
-router.post("/share", auth, express.json({ limit: "20mb" }), async (req, res) => {
+router.post("/share", auth, async (req, res) => {
     try {
         const {
             title,
@@ -148,33 +149,38 @@ router.post("/share", auth, express.json({ limit: "20mb" }), async (req, res) =>
         if (!title || !title.trim()) {
             return res.status(400).json({ message: "Title is required." });
         }
-        
-        let resType = mediaType === "video" ? "video" : "image";
-        if (videoUrl && (videoUrl.endsWith('.jpg') || videoUrl.endsWith('.png') || videoUrl.endsWith('.jpeg') || videoUrl.includes('/image/upload/'))) {
-            resType = "image";
-        } else if (videoUrl && (videoUrl.endsWith('.mp4') || videoUrl.includes('/video/upload/'))) {
-            resType = "video";
-        }
-        
-        let imageUrl = "";
-        let cloudinaryId = "";
 
+        let imageUrl, cloudinaryId;
+
+        // Case 1: Already uploaded to Cloudinary (from generator)
         if (videoUrl && cloudinaryPublicId) {
             imageUrl = videoUrl;
             cloudinaryId = cloudinaryPublicId;
-        } else if (videoUrl) {
-            const result = await uploadRemoteToCloudinary(videoUrl, resType);
-            imageUrl = result.secure_url;
-            cloudinaryId = result.public_id;
-        } else if (imageBase64) {
+        }
+        // Case 2: Base64 data provided (legacy/direct upload)
+        else if (imageBase64) {
+            // Guard against excessively large payloads (25 MB base64 ≈ ~18.75 MB raw)
+            const maxBase64Length = 25 * 1024 * 1024;
+            if (imageBase64.length > maxBase64Length) {
+                return res.status(413).json({ message: "File too large. Maximum size is ~18 MB." });
+            }
+
+            // Convert base64 to buffer and upload to Cloudinary
             const buffer = Buffer.from(imageBase64, "base64");
+            const resType = mediaType === "video" ? "video" : "image";
             const result = await uploadToCloudinary(buffer, resType);
             imageUrl = result.secure_url;
             cloudinaryId = result.public_id;
-        } else {
-            return res.status(400).json({
-                message: "Media data is required. Send videoUrl with cloudinaryPublicId, or imageBase64.",
-            });
+        }
+        // Case 3: videoUrl provided but no cloudinaryPublicId (re-upload from URL)
+        else if (videoUrl) {
+            const resType = mediaType === "video" ? "video" : "image";
+            const result = await uploadRemoteToCloudinary(videoUrl, resType);
+            imageUrl = result.secure_url;
+            cloudinaryId = result.public_id;
+        }
+        else {
+            return res.status(400).json({ message: "Image/video data is required (imageBase64, videoUrl, or cloudinaryPublicId)." });
         }
 
         const post = await Post.create({
@@ -183,7 +189,7 @@ router.post("/share", auth, express.json({ limit: "20mb" }), async (req, res) =>
             description: (description || "").trim(),
             imageUrl,
             cloudinaryId,
-            mediaType: resType,
+            mediaType: mediaType || "image",
             link: (link || "").trim(),
         });
 
@@ -191,7 +197,10 @@ router.post("/share", auth, express.json({ limit: "20mb" }), async (req, res) =>
         res.status(201).json(post);
     } catch (err) {
         console.error("Share post error:", err);
-        res.status(500).json({ message: "Failed to share to community." });
+        const message = process.env.NODE_ENV === "production"
+            ? "Failed to share to community."
+            : `Failed to share: ${err.message || err}`;
+        res.status(500).json({ message });
     }
 });
 

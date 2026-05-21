@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/Button";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/hooks/useAuth";
 import { userService } from "@/services/user";
 import { communityService } from "@/services/community";
+import { paymentService } from "@/services/payment";
+import { useSearchParams } from "next/navigation";
 
 
 
@@ -17,8 +19,9 @@ interface GenerationResult {
     cloudinaryPublicId: string | null;
 }
 
-export default function GeneratorPage() {
-    const { user, updateCredits } = useAuth();
+function GeneratorPageInner() {
+    const { user, updateCredits, updateGenerationCount } = useAuth();
+    const searchParams = useSearchParams();
 
     // Form state
     const [brandName, setBrandName] = useState("");
@@ -41,6 +44,12 @@ export default function GeneratorPage() {
     const [genError, setGenError] = useState<string | null>(null);
     const [elapsedTime, setElapsedTime] = useState(0);
 
+    // Payment state
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [isInitiatingPayment, setIsInitiatingPayment] = useState(false);
+    const [paymentError, setPaymentError] = useState<string | null>(null);
+    const [justPaid, setJustPaid] = useState(false); // Track if user just completed payment
+
     // Share to community state
     const [showShareModal, setShowShareModal] = useState(false);
     const [shareTitle, setShareTitle] = useState("");
@@ -48,12 +57,29 @@ export default function GeneratorPage() {
     const [shareLink, setShareLink] = useState("");
     const [sharing, setSharing] = useState(false);
     const [shared, setShared] = useState(false);
+    const [shareError, setShareError] = useState<string | null>(null);
 
     const productInputRef = useRef<HTMLInputElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const hasCredits = (user?.credits ?? 0) > 0;
+    const isFirstGeneration = (user?.generationCount ?? 0) === 0;
+
+    // Check if user returned from payment
+    useEffect(() => {
+        const paid = searchParams.get("paid");
+        if (paid === "true") {
+            // User just paid successfully
+            setJustPaid(true);
+            console.log("User returned from successful payment");
+            
+            // Clear the parameter from URL
+            const url = new URL(window.location.href);
+            url.searchParams.delete("paid");
+            window.history.replaceState({}, "", url.toString());
+        }
+    }, [searchParams]);
 
     // Timer for generation progress
     useEffect(() => {
@@ -86,21 +112,68 @@ export default function GeneratorPage() {
         setProductPreview(URL.createObjectURL(file));
     };
 
-
-
     const handleGenerate = async () => {
         if (!productDescription.trim() || !productPhoto) return;
         if (!hasCredits) return;
 
+        // Check if user just paid (tracked in state)
+        if (justPaid) {
+            // User just completed payment, allow generation
+            setJustPaid(false); // Clear the flag after using it
+            await executeGeneration(false);
+            return;
+        }
+
+        // Check if this is the first generation (free)
+        if (isFirstGeneration) {
+            // First generation is free — proceed directly
+            await executeGeneration(true);
+            return;
+        }
+
+        // For subsequent generations, show payment modal
+        setShowPaymentModal(true);
+    };
+
+    const handlePayAndGenerate = async () => {
+        setIsInitiatingPayment(true);
+        setPaymentError(null);
+
+        try {
+            const result = await paymentService.initiateGeneration();
+
+            if (result.free) {
+                // Shouldn't happen here but handle gracefully
+                setShowPaymentModal(false);
+                await executeGeneration(true);
+                return;
+            }
+
+            if (result.redirectUrl) {
+                // Redirect to PhonePe payment page
+                window.location.href = result.redirectUrl;
+            } else {
+                setPaymentError("Could not initiate payment. Please try again.");
+            }
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : "Payment initiation failed.";
+            setPaymentError(message);
+        } finally {
+            setIsInitiatingPayment(false);
+        }
+    };
+
+    const executeGeneration = async (isFree: boolean) => {
         setIsGenerating(true);
         setGenError(null);
         setGenerationResult(null);
+        setShowPaymentModal(false);
 
         try {
             const formData = new FormData();
             formData.append("brandName", brandName.trim());
             formData.append("productDescription", productDescription.trim());
-            formData.append("productPhoto", productPhoto);
+            formData.append("productPhoto", productPhoto!);
             formData.append("style", selectedStyle);
             formData.append("aspectRatio", selectedRatio);
             formData.append("duration", String(selectedDuration));
@@ -123,6 +196,20 @@ export default function GeneratorPage() {
                 generationId: data.generationId,
                 cloudinaryPublicId: data.cloudinaryPublicId ?? null,
             });
+
+            // Record the generation
+            if (isFree) {
+                // Record free generation on backend
+                try {
+                    const result = await paymentService.recordFreeGeneration();
+                    updateGenerationCount(result.generationCount);
+                } catch {
+                    // Optimistic update
+                    updateGenerationCount(1);
+                }
+            }
+            // Note: For paid generations, the count was already incremented during payment verification
+            // So we don't increment it again here
 
             // Deduct credit after successful generation
             try {
@@ -152,29 +239,33 @@ export default function GeneratorPage() {
         setShareDesc(productDescription);
         setShareLink("");
         setShared(false);
+        setShareError(null);
         setShowShareModal(true);
     };
 
     const handleShare = async () => {
         if (!generationResult || !shareTitle.trim()) return;
         setSharing(true);
+        setShareError(null);
         try {
-            const isVideoUrl = generationResult.videoUrl.endsWith('.mp4') || generationResult.videoUrl.includes('/video/');
+            // Determine the correct media type based on what was generated
+            const isVideo = generationType === "video";
             await communityService.shareFromGenerator({
                 title: shareTitle.trim(),
                 description: shareDesc.trim(),
                 link: shareLink.trim(),
                 videoUrl: generationResult.videoUrl,
                 cloudinaryPublicId: generationResult.cloudinaryPublicId,
-                mediaType: isVideoUrl ? "video" : "image",
+                mediaType: isVideo ? "video" : "image",
             });
             setShared(true);
             setTimeout(() => setShowShareModal(false), 1500);
-        } catch (err) {
+        } catch (err: unknown) {
+            console.error("Share failed:", err);
             const message =
                 (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-                (err instanceof Error ? err.message : "Share failed");
-            console.error("Share failed:", message);
+                (err instanceof Error ? err.message : "Failed to share. Please try again.");
+            setShareError(message);
         } finally {
             setSharing(false);
         }
@@ -205,7 +296,7 @@ export default function GeneratorPage() {
                                     Upload your product — AI creates a {generationType === "video" ? "video" : "image"} ad with Freepik
                                 </p>
                             </div>
-                            {/* Credits indicator */}
+                            {/* Credits & Generation Info */}
                             <div className="flex items-center gap-3">
                                 <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${hasCredits ? "bg-surface-light border-border" : "bg-red-500/10 border-red-500/20"}`}>
                                     <svg className={`w-4 h-4 ${hasCredits ? "text-accent-gold" : "text-red-400"}`} fill="currentColor" viewBox="0 0 24 24">
@@ -215,14 +306,13 @@ export default function GeneratorPage() {
                                         {user?.credits ?? 0} credits
                                     </span>
                                 </div>
-                                {user?.role === "free" && (
-                                    <span className="text-xs text-text-muted px-2 py-1 rounded-md bg-accent-purple/10 border border-accent-purple/20">
-                                        Free Plan
+                                {isFirstGeneration ? (
+                                    <span className="text-xs text-green-400 px-2 py-1 rounded-md bg-green-500/10 border border-green-500/20">
+                                        🎁 1st Ad Free
                                     </span>
-                                )}
-                                {user?.role === "pro" && (
+                                ) : (
                                     <span className="text-xs text-accent-gold px-2 py-1 rounded-md bg-accent-gold/10 border border-accent-gold/20">
-                                        ⭐ Pro
+                                        ₹1/generation
                                     </span>
                                 )}
                             </div>
@@ -333,18 +423,25 @@ export default function GeneratorPage() {
                                             </svg>
                                             No Credits Remaining
                                         </>
+                                    ) : isFirstGeneration ? (
+                                        <>
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
+                                            </svg>
+                                            Generate {generationType === "video" ? "Video" : "Image"} Ad — Free 🎁
+                                        </>
                                     ) : (
                                         <>
                                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
                                             </svg>
-                                            Generate {generationType === "video" ? "Video" : "Image"} Ad — 1 Credit
+                                            Generate {generationType === "video" ? "Video" : "Image"} Ad — ₹1
                                         </>
                                     )}
                                 </Button>
                                 {!hasCredits && (
                                     <p className="text-center text-xs text-red-400 mt-2">
-                                        Upgrade to Pro for 400 credits
+                                        No credits remaining. Contact support to get more credits.
                                     </p>
                                 )}
                                 {uploadError && (
@@ -563,7 +660,128 @@ export default function GeneratorPage() {
                     </div>
                 </div>
             </div>
-            {/* Share to Community Modal */}
+
+            {/* ═══════════════════════════════════════════════════════════
+                 PAYMENT MODAL — PhonePe ₹1 per generation
+                 ═══════════════════════════════════════════════════════════ */}
+            <AnimatePresence>
+                {showPaymentModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4"
+                        onClick={() => !isInitiatingPayment && setShowPaymentModal(false)}
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 30 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 30 }}
+                            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="glass rounded-2xl p-8 max-w-md w-full border border-border relative overflow-hidden"
+                        >
+                            {/* Decorative gradient */}
+                            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-accent-purple via-accent-indigo to-accent-purple" />
+
+                            {/* PhonePe Logo Area */}
+                            <div className="text-center mb-6">
+                                <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-purple-600/20 to-indigo-600/20 flex items-center justify-center mb-4 border border-purple-500/20">
+                                    <svg className="w-8 h-8 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+                                    </svg>
+                                </div>
+                                <h2 className="text-2xl font-display font-bold text-text-primary">
+                                    Pay to Generate
+                                </h2>
+                                <p className="text-text-secondary mt-2 text-sm">
+                                    Your free generation has been used. Each additional ad costs just ₹1.
+                                </p>
+                            </div>
+
+                            {/* Price Display */}
+                            <div className="bg-surface-light/80 rounded-xl p-5 mb-6 border border-border">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm text-text-secondary">AI Ad Generation</p>
+                                        <p className="text-xs text-text-muted mt-0.5">
+                                            {generationType === "video" ? "Video" : "Image"} • {selectedStyle} • {selectedRatio}
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-2xl font-bold text-text-primary">₹1</p>
+                                        <p className="text-xs text-text-muted">via PhonePe</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Info */}
+                            <div className="flex items-start gap-3 mb-6 p-3 rounded-xl bg-accent-purple/5 border border-accent-purple/10">
+                                <svg className="w-5 h-5 text-accent-purple flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                                </svg>
+                                <p className="text-xs text-text-secondary leading-relaxed">
+                                    You&apos;ll be redirected to PhonePe to complete the payment. After payment, you&apos;ll be brought back to generate your ad automatically.
+                                </p>
+                            </div>
+
+                            {/* Error */}
+                            {paymentError && (
+                                <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                                    <p className="text-sm text-red-400">{paymentError}</p>
+                                </div>
+                            )}
+
+                            {/* Actions */}
+                            <div className="flex gap-3">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setShowPaymentModal(false)}
+                                    disabled={isInitiatingPayment}
+                                    fullWidth
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    variant="primary"
+                                    onClick={handlePayAndGenerate}
+                                    disabled={isInitiatingPayment}
+                                    fullWidth
+                                >
+                                    {isInitiatingPayment ? (
+                                        <>
+                                            <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                            </svg>
+                                            Connecting to PhonePe...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                                            </svg>
+                                            Pay ₹1 with PhonePe
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+
+                            {/* Security Note */}
+                            <p className="text-center text-xs text-text-muted mt-4 flex items-center justify-center gap-1">
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                                </svg>
+                                Secured by PhonePe Payment Gateway
+                            </p>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* ═══════════════════════════════════════════════════════════
+                 SHARE TO COMMUNITY MODAL
+                 ═══════════════════════════════════════════════════════════ */}
             <AnimatePresence>
                 {showShareModal && (
                     <motion.div
@@ -624,6 +842,11 @@ export default function GeneratorPage() {
                                             className="w-full bg-surface-light/80 border border-border rounded-xl px-4 py-3 text-text-primary placeholder-text-muted text-sm outline-none focus:border-accent-purple/50 transition-all"
                                         />
                                     </div>
+                                    {shareError && (
+                                        <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                                            <p className="text-sm text-red-400">{shareError}</p>
+                                        </div>
+                                    )}
                                     <div className="flex gap-3">
                                         <Button variant="outline" onClick={() => setShowShareModal(false)} disabled={sharing} fullWidth>
                                             Cancel
@@ -639,5 +862,17 @@ export default function GeneratorPage() {
                 )}
             </AnimatePresence>
         </ProtectedRoute>
+    );
+}
+
+export default function GeneratorPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center bg-background">
+                <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+        }>
+            <GeneratorPageInner />
+        </Suspense>
     );
 }

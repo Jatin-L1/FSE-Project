@@ -3,40 +3,27 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Logo } from "@/components/ui/Logo";
 import { useAuth } from "@/hooks/useAuth";
-import { paymentService } from "@/services/payment";
 
 const navLinks = [
     { label: "Features", href: "#features" },
     { label: "Generator", href: "/generator" },
     { label: "Community", href: "/community" },
-    { label: "Pricing", href: "#pricing" },
+    { label: "Pricing", href: "/pricing" },
 ];
 
 export function Navbar() {
     const [scrolled, setScrolled] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
-    const { isAuthenticated, user, loading, logout, refreshUser } = useAuth();
-    const router = useRouter();
+    const { isAuthenticated, user, loading, logout } = useAuth();
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 50);
         window.addEventListener("scroll", handleScroll, { passive: true });
         return () => window.removeEventListener("scroll", handleScroll);
     }, []);
-
-    const handleUpgrade = async () => {
-        try {
-            await paymentService.initiateUpgrade();
-            // Refetch user profile to get updated role and credits
-            await refreshUser();
-        } catch {
-            router.push("/#pricing");
-        }
-    };
 
     return (
         <motion.header
@@ -86,14 +73,15 @@ export function Navbar() {
                                 <span className="text-text-secondary font-medium">{user.credits}</span>
                             </div>
 
-                            {/* Upgrade Button (free users only) */}
-                            {user.role === "free" && (
-                                <Button variant="outline" size="sm" onClick={handleUpgrade}>
-                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                                    </svg>
-                                    Upgrade to Pro
-                                </Button>
+                            {/* Generation Info */}
+                            {(user.generationCount ?? 0) === 0 ? (
+                                <span className="text-xs text-green-400 px-2 py-1 rounded-md bg-green-500/10 border border-green-500/20 font-medium">
+                                    🎁 1st Ad Free
+                                </span>
+                            ) : (
+                                <span className="text-xs text-accent-gold px-2 py-1 rounded-md bg-accent-gold/10 border border-accent-gold/20 font-medium">
+                                    ₹1/generation
+                                </span>
                             )}
 
                             {/* User Menu */}
@@ -182,11 +170,6 @@ export function Navbar() {
                                                 </p>
                                             </div>
                                         </div>
-                                        {user.role === "free" && (
-                                            <Button variant="primary" fullWidth onClick={() => { setMobileOpen(false); handleUpgrade(); }}>
-                                                Upgrade to Pro
-                                            </Button>
-                                        )}
                                         <Button variant="outline" fullWidth onClick={() => { setMobileOpen(false); logout(); }}>
                                             Sign Out
                                         </Button>

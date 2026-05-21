@@ -8,6 +8,7 @@ export interface AuthResponse {
         email: string;
         role: "free" | "pro";
         credits: number;
+        generationCount: number;
     };
 }
 

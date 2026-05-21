@@ -13,6 +13,7 @@ export interface AuthState {
         email: string;
         role: "free" | "pro";
         credits: number;
+        generationCount: number;
     } | null;
     token: string | null;
     loading: boolean;
@@ -86,6 +87,7 @@ interface AuthContextValue extends AuthState {
     logout: () => void;
     refreshUser: () => Promise<void>;
     updateCredits: (credits: number) => void;
+    updateGenerationCount: (count: number) => void;
     clearError: () => void;
 }
 
@@ -178,6 +180,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: "UPDATE_USER", payload: { credits } });
     }, []);
 
+    const updateGenerationCount = useCallback((generationCount: number) => {
+        dispatch({ type: "UPDATE_USER", payload: { generationCount } });
+    }, []);
+
     const clearError = useCallback(() => {
         dispatch({ type: "CLEAR_ERROR" });
     }, []);
@@ -190,6 +196,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         refreshUser,
         updateCredits,
+        updateGenerationCount,
         clearError,
     };
 
