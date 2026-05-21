@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { paymentService } from "@/services/payment";
 import { useAuth } from "@/hooks/useAuth";
 
-type Status = "verifying" | "success" | "failed";
+type Status = "verifying" | "success" | "failed" | "pending";
 
 function PaymentCallbackInner() {
     const searchParams = useSearchParams();
@@ -15,20 +15,45 @@ function PaymentCallbackInner() {
     const [message, setMessage] = useState("");
 
     useEffect(() => {
-        const txnId = searchParams.get("txnId");
-        if (!txnId) {
+        const orderId = searchParams.get("orderId");
+        if (!orderId) {
             setStatus("failed");
-            setMessage("Invalid payment session. No transaction ID found.");
+            setMessage("Invalid payment session. No order ID found.");
             return;
         }
 
         (async () => {
             try {
-                const result = await paymentService.verifyPayment(txnId);
+                const result = await paymentService.verifyGeneration(orderId);
                 if (result.success) {
                     await refreshUser();
                     setStatus("success");
-                    setMessage(result.message || "Payment successful! You are now a Pro user.");
+                    setMessage(result.message || "Payment successful! Redirecting to generate your ad...");
+                    // Auto-redirect to generator after 2 seconds
+                    setTimeout(() => {
+                        router.push("/generator?paid=true");
+                    }, 2000);
+                } else if (result.state === "PENDING") {
+                    setStatus("pending");
+                    setMessage("Your payment is being processed. This may take a moment...");
+                    // Retry verification after 5 seconds
+                    setTimeout(async () => {
+                        try {
+                            const retry = await paymentService.verifyGeneration(orderId);
+                            if (retry.success) {
+                                await refreshUser();
+                                setStatus("success");
+                                setMessage("Payment confirmed! Redirecting...");
+                                setTimeout(() => router.push("/generator?paid=true"), 2000);
+                            } else {
+                                setStatus("failed");
+                                setMessage(retry.message || "Payment could not be verified. Please contact support.");
+                            }
+                        } catch {
+                            setStatus("failed");
+                            setMessage("Verification timed out. If you were charged, please contact support.");
+                        }
+                    }, 5000);
                 } else {
                     setStatus("failed");
                     setMessage(result.message || "Payment could not be verified. Please contact support.");
@@ -38,7 +63,7 @@ function PaymentCallbackInner() {
                 setMessage("An error occurred while verifying your payment. Please contact support.");
             }
         })();
-    }, [searchParams, refreshUser]);
+    }, [searchParams, refreshUser, router]);
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4">
@@ -51,6 +76,15 @@ function PaymentCallbackInner() {
                     </div>
                 )}
 
+                {status === "pending" && (
+                    <div>
+                        <div className="w-16 h-16 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
+                        <h1 className="text-2xl font-bold text-white mb-2">Payment Processing</h1>
+                        <p className="text-gray-400">{message}</p>
+                        <p className="text-yellow-400 text-sm mt-4">Please don&apos;t close this page...</p>
+                    </div>
+                )}
+
                 {status === "success" && (
                     <div>
                         <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -59,14 +93,12 @@ function PaymentCallbackInner() {
                             </svg>
                         </div>
                         <h1 className="text-2xl font-bold text-white mb-2">Payment Successful!</h1>
-                        <p className="text-gray-400 mb-6">{message}</p>
-                        <p className="text-purple-400 font-semibold mb-8">You now have 400 credits to use.</p>
-                        <button
-                            onClick={() => router.push("/generator")}
-                            className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-8 py-3 rounded-lg transition-colors"
-                        >
-                            Start Generating
-                        </button>
+                        <p className="text-gray-400 mb-4">{message}</p>
+                        <p className="text-purple-400 font-semibold mb-6">₹1 payment confirmed. Your ad is ready to generate!</p>
+                        <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+                            <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                            Redirecting to generator...
+                        </div>
                     </div>
                 )}
 
@@ -84,7 +116,7 @@ function PaymentCallbackInner() {
                                 onClick={() => router.push("/generator")}
                                 className="bg-gray-700 hover:bg-gray-600 text-white font-semibold px-6 py-3 rounded-lg transition-colors"
                             >
-                                Go Back
+                                Try Again
                             </button>
                             <button
                                 onClick={() => router.push("/")}

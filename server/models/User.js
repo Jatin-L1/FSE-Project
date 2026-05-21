@@ -37,6 +37,10 @@ const userSchema = new mongoose.Schema(
             type: Number,
             default: 50,
         },
+        generationCount: {
+            type: Number,
+            default: 0,
+        },
     },
     {
         timestamps: true,
@@ -67,6 +71,7 @@ userSchema.methods.toProfile = function () {
         email: this.email,
         role: this.role,
         credits: this.credits,
+        generationCount: this.generationCount,
         avatar: this.avatar,
     };
 };
